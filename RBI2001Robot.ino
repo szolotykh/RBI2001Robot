@@ -1,5 +1,8 @@
 #include <BluetoothClient.h>
 #include <Servo.h>
+
+unsigned long int endTime=0;
+
 // =========== Mouth ===================
 #define MOUTH_MOTOR_PIN 12
 #define MOUTH_TOUCH_PIN 6
@@ -14,7 +17,7 @@ byte touch;
 #define NECK_POT_PIN A11
 #define DOWN 150
 #define UP 0
-#define DOWN_MAX 980
+#define DOWN_MAX 1000 //980 before
 #define UP_MAX 65
 Servo neck;
 int neckPos;
@@ -135,197 +138,208 @@ byte findLine(int sensorValue, int lineInd){
 void followLine(){
    // Follow line alghorithm
     if(leftLight >= LIGHT_MEAN && rightLight <= LIGHT_MEAN){
-      setLeftMotor(0);
-      setRightMotor(90);
+      setLeftMotor(-20);
+      setRightMotor(100);
     }else{
       if(leftLight <= LIGHT_MEAN && rightLight >= LIGHT_MEAN){
-        setLeftMotor(90);
-        setRightMotor(0);
+        setLeftMotor(100);
+        setRightMotor(-20);
       }else{
           moveRobot(100);
       }
     }
 }
 
+byte moveToLine(byte sp, byte ln){
+  while(1){
+    leftLight = analogRead(A2);
+    centerLight = analogRead(A1);
+    rightLight = analogRead(A0);
+    followLine();
+    if(findLine(centerLight, ln)==1)
+      break;
+  }
+  return 1;
+}
+      
+byte rotateLeftToLine(byte sp, byte ln){
+  rotateLeft(sp);
+  while(1){
+    frontLight = analogRead(A3);
+    if(findLine(frontLight, ln)==1)
+      break;
+  }
+  //delay(80);
+  return 1;
+}
+
+byte rotateRightToLine(byte sp, byte ln){
+  rotateRight(sp);
+  while(1){
+    frontLight = analogRead(A3);
+    if(findLine(frontLight, ln)==1)
+      break;
+  }
+  //delay(80);
+  return 1;
+}
+
 void loop(){
   // Read sensors
-  leftLight = analogRead(A2);
-  centerLight = analogRead(A1);
-  rightLight = analogRead(A0);
-  frontLight = analogRead(A3);
+  //leftLight = analogRead(A2);
+  //centerLight = analogRead(A1);
+  //rightLight = analogRead(A0);
+  //frontLight = analogRead(A3);
   //frontLight2 = analogRead(A10);
   // Read neck potentiometr
-  neckPos = analogRead(NECK_POT_PIN);
+  //neckPos = analogRead(NECK_POT_PIN);
   // Read touch
-  touch = digitalRead(6);
+  //touch = digitalRead(6);
   
-  // Main switch
-  
-  switch(stage){
-  case 100: // Move forword and rotate right
+  /*
+  // Intro
     moveRobot(100);
     delay(3000);
     rotateRight(100);
     delay(3500);
-    stage = 101;
-  break;
-  case 101: //find 3th line
-    moveRobot(100);
+   */
+  moveRobot(100);
+  while(1){  
+    centerLight = analogRead(A1);
     if(findLine(centerLight, 3)==1)
-      stage = 102;
-  break;
-  case 102:
-    rotateLeft(100);
-    if(findLine(frontLight, 1)==1)
-      stage = 103;
-  break;
-  case 103:
-    followLine();
-    if(findLine(centerLight, 1)==1)
-      stage = 104;
-  break;
-  case 104:
-    rotateLeft(100);
-    if(findLine(frontLight, 2)==1)
-      stage = 105;
-  break;
-  case 105:
-    followLine();
-    if(findLine(centerLight, 3)==1){
-        moveRobot(-100);
-        delay(150);
-        stage = 106;
-        stopRobot();
-        mouth.write(IN);
-        neck.write(DOWN);
-    }
-  break;
-  case 106: // Taking rod
+      break;
+  }
+  rotateLeftToLine(100, 1);
+  moveToLine(100, 1);
+  rotateLeftToLine(100, 2);
+  moveToLine(100, 3);
+  
+  moveRobot(-100);
+  delay(150);
+  stopRobot();
+  
+  mouth.write(IN);
+  neck.write(DOWN);
+
+  while(1){
+    // Read neck potentiometr
+    neckPos = analogRead(NECK_POT_PIN);
+    // Read touch
+    touch = digitalRead(6);
+    
     if(neckStage == DOWN){
-       if(neckPos > DOWN_MAX){
-       neck.write(STOP);
+      if(neckPos > DOWN_MAX){
+        neck.write(STOP);
+      }
+      if(touch == 0){
+        mouth.write(STOP);
+        neckStage = UP;
+        neck.write(UP);
+      }
+    }else{
+      if(neckPos < UP_MAX){
+        break;
+      }
     }
+  }
+  neck.write(STOP);
+  moveRobot(-100);
+  delay(350);
+        
+  rotateLeftToLine(100, 3);
+  moveToLine(100, 2);
+  rotateRightToLine(100, 2);
+ 
+ // Move to spent rod  
+  while(1){
+    leftLight = analogRead(A2);
+    rightLight = analogRead(A0);
+    frontLight2 = analogRead(A10);
+    
+    followLine();
+    if(findLine(frontLight2, 1)==1)
+      break;
+  }
+  stopRobot();
+  // Put spent rod
+  mouth.write(OUT);
+  delay(2500);
+  mouth.write(STOP);
+  // A littel bit back
+  
+  
+  moveRobot(-100);
+  delay(1000);
+  
+  rotateRightToLine(100, 2);
+  
+  moveToLine(100, 1);
+  rotateRightToLine(100, 2);
+  moveToLine(100, 2);//<<<<-
+  rotateLeftToLine(100, 2);
+  
+  // Move to new rod
+  while(1){
+    leftLight = analogRead(A2);
+    rightLight = analogRead(A0);
+    frontLight2 = analogRead(A10);
+    
+    followLine();
+    if(findLine(frontLight2, 1)==1)
+      break;
+  }
+  
+  mouth.write(IN);
+  moveRobot(5);
+  
+  while(1){
+    // Read touch
+    touch = digitalRead(6);
     if(touch == 0){
       mouth.write(STOP);
-      neckStage = UP;
-      neck.write(UP);
-    }
-  }else{
-    if(neckPos < UP_MAX){
-      neck.write(STOP);
-      moveRobot(-100);
-      delay(250);
-      stage = 107;
+      break;
     }
   }
-  break;
-  case 107:
-    rotateLeft(100);
-    if(findLine(frontLight, 3)==1){
-      stage = 108;
-    }
-  break;
-  case 108:
-    followLine();
-    if(findLine(centerLight, 2)==1){
-      stage = 109;
-    }
-  break;
-  case 109:
-    rotateRight(100);
-    if(findLine(frontLight, 2)==1){
-      delay(100);
-      stopRobot();
-      delay(1000);
-      stage = 110;
-    }
-  break;
-  case 110:
-    followLine();/*
-    if(findLine(frontLight2, 2)==1){
-      stopRobot();
-      stage = 111;
-    }  */
-  break;
-  case 111:
-    mouth.write(OUT);
-  break;
-  /*
-  case 1:
-    // Find line event
-    if(isDark(centerLight)==1){
-      if(detectLine==0){
-        detectLine = 1;
-        lineCount++;
-      }
-      if(lineCount==spentRod){
-          stage = 2;
-          detectLine=0;
-      }
-    }else{
-      detectLine = 0;
-    }
-  break;
-  case 2:// Rotation
-    rotateRight(100);
-    if(isDark(frontLight)==0){
-          detectLine = 1;
-    }else{
-      if(isDark(frontLight)==1 && detectLine==1){
-          detectLine=0;
-          stage = 3;
-      }
-    }
-  break;
-  case 3:
   
-   // Follow line alghorithm
-    if(leftLight >= LIGHT_MEAN && rightLight <= LIGHT_MEAN){
-      setLeftMotor(0);
-      setRightMotor(100);
-    }else{
-      if(leftLight <= LIGHT_MEAN && rightLight >= LIGHT_MEAN){
-        setLeftMotor(100);
-        setRightMotor(0);
-      }else{
-        if(isDark(leftLight)&&isDark(rightLight)){
-           stopRobot();
-           stage = 4;
-        }else{
-          moveRobot(100);
-        }
+  // Go back for a littel
+  moveRobot(-100);
+  delay(400);
+  // rotate on 180
+  rotateRightToLine(100, 2);
+  // Go to main line
+  moveToLine(100, 1);
+  
+  //rotateRightToLine(75, 2);
+  rotateLeftToLine(100, 4);
+  moveToLine(100, 4); 
+  stopRobot();
+  
+  moveRobot(-100);
+  delay(75);
+  stopRobot();
+  
+  neck.write(DOWN);
+  while(1){
+      neckPos = analogRead(NECK_POT_PIN);
+      if(neckPos > DOWN_MAX){
+        neck.write(STOP);
+        break;
       }
-    }
-  break;
-  case 4:
-    stage = 5;
-    subStage=1;
-    detectLine = 0;
-  break;
-  case 5:
-    if(subStage==1){
-      moveRobot(-100);
-      delay(2700);
-      subStage = 2;
-    }else{
-      rotateRight(100);
-      if(isDark(centerLight)==1 && detectLine==0){
-        detectLine = 1;
-      }
-      if(isBright(centerLight)==1 && detectLine==1){
-        //detectLine=2;
-        detectLine=0;
-        moveRobot(100);
-        stage=6;
-        subStage = 1;
-    
-      }
-    }
-  break;
-  case 6:
-  break;
-  */
   }
+  mouth.write(OUT);
+  delay(2500);
+  
+  neck.write(UP);
+  while(1){
+      neckPos = analogRead(NECK_POT_PIN);
+      if(neckPos < UP_MAX){
+        neck.write(STOP);
+        break;
+      }
+  }
+  
+  
+  delay(10000);
   
   // === Display data ===
   Serial.print(leftLight);
