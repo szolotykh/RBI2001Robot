@@ -1,7 +1,7 @@
 #include <BluetoothClient.h>
 #include <Servo.h>
 //============ MAP =====================
-int stage = 1;
+int stage = 100;
 int subStage = 1;
 int spentRod = 3;
 int newRod = 1;
@@ -14,7 +14,7 @@ int newRod = 1;
 #define RESUME_MOVE 0x05 //Resume movement 
 #define ROBOT_STATIUS 0x06 // Robot status 
 #define HEARTBEAT 0x07 //Heartbeat 
-//0x08 â€“ 0x0F Reserved  
+//0x08 to 0x0F Reserved  
 //0x10 and higher User defined
 
 int lineCount = 0;
@@ -27,7 +27,7 @@ int detectLine = 0;
 int leftLight; // A2
 int centerLight; // A1
 int rightLight; // A0
-int backLight; // A3
+int frontLight; // A3
 
 int isBright(int sensor_val){
   if(sensor_val<=LIGHT_MEAN)
@@ -86,14 +86,84 @@ void setup(){
   setRightMotor(RightMotorSpeed);
 }
 
+byte findLine(int sensorValue, int lineInd){
+// Find line event
+    if(isDark(sensorValue)==1){
+      if(detectLine==0){
+        detectLine = 1;
+        lineCount++;
+      }
+      if(lineCount==lineInd){
+          lineCount = 0;
+          detectLine = 0;
+          return 1;
+      }
+    }else{
+      detectLine = 0;
+    }
+    return 0;
+}
+
+void followLine(){
+   // Follow line alghorithm
+    if(leftLight >= LIGHT_MEAN && rightLight <= LIGHT_MEAN){
+      setLeftMotor(0);
+      setRightMotor(90);
+    }else{
+      if(leftLight <= LIGHT_MEAN && rightLight >= LIGHT_MEAN){
+        setLeftMotor(90);
+        setRightMotor(0);
+      }else{
+          moveRobot(100);
+      }
+    }
+}
+
 void loop(){
   // Read sensors
   leftLight = analogRead(A2);
   centerLight = analogRead(A1);
   rightLight = analogRead(A0);
-  backLight = analogRead(A3);
+  frontLight = analogRead(A3);
   // Main switch
+  
   switch(stage){
+  case 100: // Move forword and rotate right
+    moveRobot(100);
+    delay(3000);
+    rotateRight(100);
+    delay(3400);
+    stage = 101;
+  break;
+  case 101: //find 3th line
+    moveRobot(100);
+    if(findLine(centerLight, 3)==1)
+      stage = 102;
+  break;
+  case 102:
+    rotateLeft(100);
+    if(findLine(frontLight, 1)==1)
+      stage = 103;
+  break;
+  case 103:
+    followLine();
+    if(findLine(centerLight, 1)==1)
+      stage = 104;
+  break;
+  case 104:
+    rotateLeft(100);
+    if(findLine(frontLight, 2)==1)
+      stage = 105;
+  break;
+  case 105:
+    followLine();
+    if(findLine(centerLight, 4)==1)
+      stage = 106;
+  break;
+  case 106:
+    stopRobot();
+  break;
+  /*
   case 1:
     // Find line event
     if(isDark(centerLight)==1){
@@ -111,10 +181,10 @@ void loop(){
   break;
   case 2:// Rotation
     rotateRight(100);
-    if(isDark(backLight)==0){
+    if(isDark(frontLight)==0){
           detectLine = 1;
     }else{
-      if(isDark(backLight)==1 && detectLine==1){
+      if(isDark(frontLight)==1 && detectLine==1){
           detectLine=0;
           stage = 3;
       }
@@ -148,7 +218,7 @@ void loop(){
   case 5:
     if(subStage==1){
       moveRobot(-100);
-      delay(1700);
+      delay(2700);
       subStage = 2;
     }else{
       rotateRight(100);
@@ -162,17 +232,12 @@ void loop(){
         stage=6;
         subStage = 1;
     
-      }/*
-      if(isDark(centerLight)==1 && detectLine==2){
-        detectLine=0;
-        moveRobot(100);
-        stage=6;
-        subStage = 1;
-      }*/
+      }
     }
   break;
   case 6:
   break;
+  */
   }
   
   // === Display data ===
@@ -182,8 +247,8 @@ void loop(){
   Serial.print(" - ");
   Serial.print(rightLight);
   Serial.print(" - ");
-  Serial.println(backLight);
+  Serial.println(frontLight);
   Serial.println(stage);
   
-  delay(10);
+  //delay(1);
 }
