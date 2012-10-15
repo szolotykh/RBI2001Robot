@@ -1,7 +1,100 @@
 #include <BluetoothClient.h>
 #include <Servo.h>
+#include <TimerOne.h>
 
 unsigned long int endTime=0;
+
+// =========== LEDs ===================
+
+void setUpLED(){
+  pinMode(22, OUTPUT);
+  pinMode(32, OUTPUT);
+}
+
+void onLED(){
+  digitalWrite(22, HIGH);
+  digitalWrite(32, HIGH);
+}
+void offLED(){
+  digitalWrite(22, LOW);
+  digitalWrite(32, LOW);
+}
+// =========== Bluetooth ==============
+
+//0x00 Reserved  
+#define STORAGE_AVEIL 0x01 //Storage tube availability
+#define SUPPLY_AVEIL 0x02 //Supply tube availability
+#define RAD_ALERT 0x03 //Radiation alert
+#define STOP_MOVE 0x04 //Stop movement
+#define RESUME_MOVE 0x05 //Resume movement 
+#define ROBOT_STATIUS 0x06 // Robot status 
+#define HEARTBEAT 0x07 //Heartbeat 
+//0x08 to 0x0F Reserved  
+//0x10 and higher User defined
+
+int incomingByte = 0;   // for incoming serial data
+
+byte msg[6];
+
+byte mType;
+byte mLenght;
+byte mSourse;
+byte mDist;
+byte mData;
+byte mCheck;
+
+byte spentRods[4];
+byte newRods[4];
+
+byte waitByte(){
+  byte inByte;
+  while(1){
+    if(Serial3.available() > 0){
+      inByte = Serial3.read();
+      //Serial.println(inByte, HEX);
+      break;
+    }
+  }
+  return inByte;
+}
+
+byte receiveMsg(){
+  if (waitByte() == 0x5F){
+            //Serial.println("msg");
+             mLenght = waitByte();
+             mType = waitByte();
+             mSourse = waitByte();
+             mDist = waitByte();
+             if(mLenght == 6)
+               mData = waitByte();
+             else
+               mData = 0;
+             mCheck = waitByte();
+             if(255-(mLenght+mType+mSourse+mDist+mData) != mCheck)
+               return 0;
+        }
+        return 1;
+}
+
+byte sentHeartbeat(){
+  byte msg[]={0x5F,0x06,HEARTBEAT,0x01,0x00,0x00,0xF1};
+  Serial3.write(msg, 7);
+  return 1;
+}
+byte sentSpentFuelRod(){
+  byte msg[]={0x5F,0x06,RAD_ALERT,0x2C,0x00,0x00,0xCA};
+  Serial3.write(msg, 7);
+  return 1;
+}
+byte sentNewFuelRod(){
+  byte msg[]={0x5F,0x06,RAD_ALERT,0xFF,0x00,0x00,0x09}; // <====?
+  Serial3.write(msg, 7);
+  return 1;
+}
+void timerIsr()
+{
+  sentHeartbeat();
+}
 
 // =========== Mouth ===================
 #define MOUTH_MOTOR_PIN 12
@@ -106,8 +199,7 @@ void setup(){
   leftMotor.attach(8);
   rightMotor.attach(9);
   
-  setLeftMotor(LeftMotorSpeed);
-  setRightMotor(RightMotorSpeed);
+
   
   // Mouth
   pinMode(MOUTH_TOUCH_PIN, INPUT);
@@ -115,6 +207,18 @@ void setup(){
   
   // neck
   neck.attach(NECK_MOTOR_PIN);
+  
+  // Timer
+  //Serial3.begin(115200);
+  //Timer1.initialize(1500000);
+  //Timer1.attachInterrupt( timerIsr );
+  
+  
+  // LEDs
+  setUpLED();
+  //delay(10000);
+  setLeftMotor(LeftMotorSpeed);
+  setRightMotor(RightMotorSpeed);
 }
 
 byte findLine(int sensorValue, int lineInd){
@@ -203,6 +307,7 @@ void loop(){
     rotateRight(100);
     delay(3500);
    */
+   
   moveRobot(100);
   while(1){  
     centerLight = analogRead(A1);
@@ -242,9 +347,12 @@ void loop(){
       }
     }
   }
+  
+  onLED();
+  
   neck.write(STOP);
   moveRobot(-100);
-  delay(350);
+  delay(400);
         
   rotateLeftToLine(100, 3);
   moveToLine(100, 2);
@@ -265,9 +373,9 @@ void loop(){
   mouth.write(OUT);
   delay(2500);
   mouth.write(STOP);
-  // A littel bit back
+  offLED();
   
-  
+  // A littel bit back  
   moveRobot(-100);
   delay(1000);
   
@@ -277,6 +385,7 @@ void loop(){
   rotateRightToLine(100, 2);
   moveToLine(100, 2);//<<<<-
   rotateLeftToLine(100, 2);
+  
   
   // Move to new rod
   while(1){
@@ -300,7 +409,7 @@ void loop(){
       break;
     }
   }
-  
+  onLED();
   // Go back for a littel
   moveRobot(-100);
   delay(400);
@@ -309,13 +418,17 @@ void loop(){
   // Go to main line
   moveToLine(100, 1);
   
-  //rotateRightToLine(75, 2);
-  rotateLeftToLine(100, 4);
-  moveToLine(100, 4); 
+  rotateRightToLine(100, 2);
+  //rotateLeftToLine(100, 4);
+  centerLight = analogRead(A1);
+  if(isDark(centerLight) == 1)
+    moveToLine(100, 4); 
+  else
+    moveToLine(100, 3); 
   stopRobot();
   
   moveRobot(-100);
-  delay(75);
+  delay(110);
   stopRobot();
   
   neck.write(DOWN);
@@ -337,7 +450,7 @@ void loop(){
         break;
       }
   }
-  
+  offLED();
   
   delay(10000);
   
