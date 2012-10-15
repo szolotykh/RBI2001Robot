@@ -2,6 +2,7 @@
 #include <Servo.h>
 //============ MAP =====================
 int stage = 1;
+int subStage = 1;
 int spentRod = 3;
 int newRod = 1;
 
@@ -51,24 +52,29 @@ int RightMotorSpeed = 100;
 
 
 void setLeftMotor(int sp){
-  leftMotor.write(map(sp,-100,100,180,0));
+  leftMotor.write(map(sp,-100,100,0,180));
 }
 
 void setRightMotor(int sp){
-  rightMotor.write(map(sp,-100, 100, 0, 180));
+  rightMotor.write(map(sp,-100, 100, 180, 0));
 }
 
 void rotateLeft(int sp){
-  LeftMotorSpeed = -sp;
-  RightMotorSpeed = sp;
+  setLeftMotor(-sp);
+  setRightMotor(sp);
 }
 
 void rotateRight(int sp){
-  LeftMotorSpeed = sp;
-  RightMotorSpeed = -sp;
+  setLeftMotor(sp);
+  setRightMotor(-sp);
 }
-void move(){
-  
+void moveRobot(int sp){
+  setLeftMotor(sp);
+  setRightMotor(sp);
+}
+void stopRobot(){
+  setLeftMotor(0);
+  setRightMotor(0);
 }
 // ================ SetUp =================
 void setup(){
@@ -104,7 +110,7 @@ void loop(){
     }
   break;
   case 2:// Rotation
-    rotateLeft(100);
+    rotateRight(100);
     if(isDark(backLight)==0){
           detectLine = 1;
     }else{
@@ -115,51 +121,59 @@ void loop(){
     }
   break;
   case 3:
+  
    // Follow line alghorithm
     if(leftLight >= LIGHT_MEAN && rightLight <= LIGHT_MEAN){
-      LeftMotorSpeed = 100;
-      RightMotorSpeed = 0;
+      setLeftMotor(0);
+      setRightMotor(100);
     }else{
       if(leftLight <= LIGHT_MEAN && rightLight >= LIGHT_MEAN){
-        LeftMotorSpeed = 0;
-        RightMotorSpeed = 100;
+        setLeftMotor(100);
+        setRightMotor(0);
       }else{
         if(isDark(leftLight)&&isDark(rightLight)){
-           LeftMotorSpeed = 0;
-           RightMotorSpeed = 0;
+           stopRobot();
            stage = 4;
         }else{
-          LeftMotorSpeed = 100;
-          RightMotorSpeed = 100;
+          moveRobot(100);
         }
       }
     }
   break;
   case 4:
     stage = 5;
+    subStage=1;
     detectLine = 0;
   break;
   case 5:
-    rotateLeft(100);
-    if(isDark(centerLight)==1 && detectLine==0){
-      detectLine = 1;
-    }
-    if(isBright(centerLight)==1 && detectLine==1){
-      detectLine=2;
-    }
-    if(isDark(centerLight)==1 && detectLine==2){
-      detectLine=0;
-      LeftMotorSpeed = 100;
-      RightMotorSpeed = 100;
-      stage=6;
+    if(subStage==1){
+      moveRobot(-100);
+      delay(1700);
+      subStage = 2;
+    }else{
+      rotateRight(100);
+      if(isDark(centerLight)==1 && detectLine==0){
+        detectLine = 1;
+      }
+      if(isBright(centerLight)==1 && detectLine==1){
+        //detectLine=2;
+        detectLine=0;
+        moveRobot(100);
+        stage=6;
+        subStage = 1;
+    
+      }/*
+      if(isDark(centerLight)==1 && detectLine==2){
+        detectLine=0;
+        moveRobot(100);
+        stage=6;
+        subStage = 1;
+      }*/
     }
   break;
   case 6:
   break;
   }
-  // Set motors speed
-  setLeftMotor(LeftMotorSpeed);
-  setRightMotor(RightMotorSpeed);
   
   // === Display data ===
   Serial.print(leftLight);
