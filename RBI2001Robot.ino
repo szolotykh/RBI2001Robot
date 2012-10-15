@@ -20,6 +20,8 @@ void offLED(){
   digitalWrite(32, LOW);
 }
 // =========== Bluetooth ==============
+int spentRod = 4;
+int newRod = 1;
 
 //0x00 Reserved  
 #define STORAGE_AVEIL 0x01 //Storage tube availability
@@ -46,6 +48,9 @@ byte mCheck;
 byte spentRods[4];
 byte newRods[4];
 
+byte fSpentFuelRod = 0;
+byte fNewFuelRod = 0;
+
 byte waitByte(){
   byte inByte;
   while(1){
@@ -60,7 +65,7 @@ byte waitByte(){
 
 byte receiveMsg(){
   if (waitByte() == 0x5F){
-            //Serial.println("msg");
+            Serial.println("msg");
              mLenght = waitByte();
              mType = waitByte();
              mSourse = waitByte();
@@ -87,13 +92,58 @@ byte sentSpentFuelRod(){
   return 1;
 }
 byte sentNewFuelRod(){
-  byte msg[]={0x5F,0x06,RAD_ALERT,0xFF,0x00,0x00,0x09}; // <====?
+  byte msg[]={0x5F,0x06,RAD_ALERT,0xFF,0x00,0x00,0xF7}; // <====?
   Serial3.write(msg, 7);
   return 1;
 }
+void receiveRodsInf(){
+
+  while(1){
+    if(receiveMsg()==1){
+          if(mType == 0x01){
+               //Serial.println("n1");
+               spentRods[0] = mData & 1;
+               spentRods[1] = (mData>>1) & 1;
+               spentRods[2] = (mData>>2) & 1;
+               spentRods[3] = (mData>>3) & 1;
+               for(byte i=0;i<4;i++){
+                 if(spentRods[i]==0){
+                   spentRod = i+1;
+                 }
+               }
+               break;
+            }
+        }
+  }
+  while(1){
+    if(receiveMsg()==1){
+      if(mType == 0x02){
+              //Serial.println("n2");
+               newRods[0] = (mData>>3) & 1;
+               newRods[1] = (mData>>2) & 1;
+               newRods[2] = (mData>>1) & 1;
+               newRods[3] = mData & 1;
+               for(byte i=0;i<4;i++){
+                 if(newRods[i]==1){
+                   newRod = i+1;
+                 }
+               }
+               break;
+      }
+    }
+   }
+
+//newRod = 1;
+//spentRod = 3;
+}
+
 void timerIsr()
 {
   sentHeartbeat();
+  if(fSpentFuelRod==1)
+    sentSpentFuelRod();
+  if(fNewFuelRod==1)
+    sentNewFuelRod();
 }
 
 // =========== Mouth ===================
@@ -116,25 +166,30 @@ Servo neck;
 int neckPos;
 int neckStage = DOWN;
 
+void neckDown(){
+  neck.write(DOWN);
+  while(1){
+      neckPos = analogRead(NECK_POT_PIN);
+      if(neckPos > DOWN_MAX){
+        neck.write(STOP);
+        break;
+      }
+  }
+}
+
+void neckUp(){
+  neck.write(UP);
+  while(1){
+      neckPos = analogRead(NECK_POT_PIN);
+      if(neckPos < UP_MAX){
+        neck.write(STOP);
+        break;
+      }
+  }
+}
+
 //============ MAP =====================
-int stage = 108;
-int subStage = 1;
-int spentRod = 3;
-int newRod = 1;
-
-//0x00 Reserved  
-#define STORAGE_AVEIL 0x01 //Storage tube availability
-#define SUPPLY_AVEIL 0x02 //Supply tube availability
-#define RAD_ALERT 0x03 //Radiation alert
-#define STOP_MOVE 0x04 //Stop movement
-#define RESUME_MOVE 0x05 //Resume movement 
-#define ROBOT_STATIUS 0x06 // Robot status 
-#define HEARTBEAT 0x07 //Heartbeat 
-//0x08 to 0x0F Reserved  
-//0x10 and higher User defined
-
 int lineCount = 0;
-
 int detectLine = 0;
 
 // ============ Light sensors ==============
@@ -193,33 +248,6 @@ void stopRobot(){
   setLeftMotor(0);
   setRightMotor(0);
 }
-// ================ SetUp =================
-void setup(){
-  Serial.begin(9600);
-  leftMotor.attach(8);
-  rightMotor.attach(9);
-  
-
-  
-  // Mouth
-  pinMode(MOUTH_TOUCH_PIN, INPUT);
-  mouth.attach(MOUTH_MOTOR_PIN);
-  
-  // neck
-  neck.attach(NECK_MOTOR_PIN);
-  
-  // Timer
-  //Serial3.begin(115200);
-  //Timer1.initialize(1500000);
-  //Timer1.attachInterrupt( timerIsr );
-  
-  
-  // LEDs
-  setUpLED();
-  //delay(10000);
-  setLeftMotor(LeftMotorSpeed);
-  setRightMotor(RightMotorSpeed);
-}
 
 byte findLine(int sensorValue, int lineInd){
 // Find line event
@@ -255,40 +283,86 @@ void followLine(){
 }
 
 byte moveToLine(byte sp, byte ln){
+  endTime = millis()+1000;
+  centerLight = analogRead(A1);
+  if(isDark(centerLight) == 1)
+    ln++;
   while(1){
     leftLight = analogRead(A2);
-    centerLight = analogRead(A1);
     rightLight = analogRead(A0);
     followLine();
-    if(findLine(centerLight, ln)==1)
-      break;
+    if(millis() > endTime){
+      centerLight = analogRead(A1);
+      if(findLine(centerLight, ln)==1)
+        break;
+    }
   }
   return 1;
 }
       
 byte rotateLeftToLine(byte sp, byte ln){
+  frontLight = analogRead(A3);
+  if(isDark(frontLight) == 1)
+    ln++;
   rotateLeft(sp);
   while(1){
-    frontLight = analogRead(A3);
-    if(findLine(frontLight, ln)==1)
-      break;
+      frontLight = analogRead(A3);
+      if(findLine(frontLight, ln)==1){
+        break;
+      }
   }
-  //delay(80);
   return 1;
 }
 
 byte rotateRightToLine(byte sp, byte ln){
+  frontLight = analogRead(A3);
+  if(isDark(frontLight) == 1)
+    ln++;
   rotateRight(sp);
   while(1){
-    frontLight = analogRead(A3);
-    if(findLine(frontLight, ln)==1)
-      break;
+      frontLight = analogRead(A3);
+      if(findLine(frontLight, ln)==1)
+        break;
   }
-  //delay(80);
   return 1;
 }
 
+// ================ SetUp =================
+void setup(){
+  Serial.begin(9600);
+  leftMotor.attach(8);
+  rightMotor.attach(9);
+  
+  // Mouth
+  pinMode(MOUTH_TOUCH_PIN, INPUT);
+  mouth.attach(MOUTH_MOTOR_PIN);
+  
+  // neck
+  neck.attach(NECK_MOTOR_PIN);
+  
+  // Timer
+  Serial3.begin(115200);
+  Timer1.initialize(1500000);
+  Timer1.attachInterrupt( timerIsr );
+  
+  // LEDs
+  setUpLED();
+  
+   //Bamp
+  pinMode(31, INPUT);
+  onLED(); 
+  receiveRodsInf();
+  offLED();
+  //Start delay
+  //delay(10000);
+  setLeftMotor(LeftMotorSpeed);
+  setRightMotor(RightMotorSpeed);
+}
+
 void loop(){
+  //while(1){
+  //  Serial.println(digitalRead(31));
+  //}
   // Read sensors
   //leftLight = analogRead(A2);
   //centerLight = analogRead(A1);
@@ -308,6 +382,7 @@ void loop(){
     delay(3500);
    */
    
+  // Stage 1
   moveRobot(100);
   while(1){  
     centerLight = analogRead(A1);
@@ -316,7 +391,7 @@ void loop(){
   }
   rotateLeftToLine(100, 1);
   moveToLine(100, 1);
-  rotateLeftToLine(100, 2);
+  rotateLeftToLine(100, 1);
   moveToLine(100, 3);
   
   moveRobot(-100);
@@ -326,6 +401,7 @@ void loop(){
   mouth.write(IN);
   neck.write(DOWN);
 
+  endTime = millis() + 6000;
   while(1){
     // Read neck potentiometr
     neckPos = analogRead(NECK_POT_PIN);
@@ -341,61 +417,88 @@ void loop(){
         neckStage = UP;
         neck.write(UP);
       }
+      if(millis()>endTime){
+        //rotateRight(50);
+        //delay(50);
+        //rotateLeft(50);
+        //delay(100);
+        //rotateRight(50);
+        //delay(50);
+        
+        neckUp();
+        endTime = millis() + 6000;
+        neck.write(DOWN);
+      }
     }else{
       if(neckPos < UP_MAX){
         break;
       }
     }
   }
-  
+  fSpentFuelRod = 1;
   onLED();
   
   neck.write(STOP);
   moveRobot(-100);
-  delay(400);
+  delay(1000);
         
-  rotateLeftToLine(100, 3);
-  moveToLine(100, 2);
-  rotateRightToLine(100, 2);
+  rotateLeftToLine(100, 1);
+  moveToLine(100, spentRod);
+  rotateRightToLine(100, 1);
  
- // Move to spent rod  
+ // Move to spent rod
+  endTime = millis()+1000; 
   while(1){
     leftLight = analogRead(A2);
     rightLight = analogRead(A0);
     frontLight2 = analogRead(A10);
     
     followLine();
-    if(findLine(frontLight2, 1)==1)
-      break;
+    if(millis() > endTime){
+      if(findLine(frontLight2, 1)==1)
+        break;
+    }
   }
   stopRobot();
   // Put spent rod
   mouth.write(OUT);
   delay(2500);
   mouth.write(STOP);
+  fSpentFuelRod=0;
   offLED();
   
   // A littel bit back  
   moveRobot(-100);
   delay(1000);
   
-  rotateRightToLine(100, 2);
-  
+  rotateRightToLine(100, 1);
+  // Move to main line
   moveToLine(100, 1);
-  rotateRightToLine(100, 2);
-  moveToLine(100, 2);//<<<<-
-  rotateLeftToLine(100, 2);
   
-  
-  // Move to new rod
+  if(spentRod < newRod){  
+    rotateRightToLine(100, 1);
+    moveToLine(100, newRod - spentRod);
+    rotateLeftToLine(100, 1);
+  }else{
+    if(spentRod > newRod){ 
+      rotateLeftToLine(100, 1);
+      moveToLine(100, spentRod-newRod);//<<<<-
+      rotateRightToLine(100, 1);
+    }
+  }
+
+  // Move to new rod from main line
+  endTime = millis()+1000;
   while(1){
     leftLight = analogRead(A2);
     rightLight = analogRead(A0);
     frontLight2 = analogRead(A10);
     
     followLine();
-    if(findLine(frontLight2, 1)==1)
-      break;
+    if(millis()>endTime){
+      if(findLine(frontLight2, 1)==1)
+        break;
+    }
   }
   
   mouth.write(IN);
@@ -409,51 +512,203 @@ void loop(){
       break;
     }
   }
+  fNewFuelRod=1;
   onLED();
   // Go back for a littel
   moveRobot(-100);
-  delay(400);
+  delay(1000);
   // rotate on 180
-  rotateRightToLine(100, 2);
+  rotateRightToLine(100, 1);
   // Go to main line
   moveToLine(100, 1);
   
-  rotateRightToLine(100, 2);
-  //rotateLeftToLine(100, 4);
-  centerLight = analogRead(A1);
-  if(isDark(centerLight) == 1)
-    moveToLine(100, 4); 
-  else
-    moveToLine(100, 3); 
-  stopRobot();
+  rotateRightToLine(100, 1);
+  if(newRod-1 != 0)
+    moveToLine(100, newRod-1);
+ 
+ while(1){
+    leftLight = analogRead(A2);
+    rightLight = analogRead(A0);
+    followLine();
+    if(digitalRead(31) == 0){
+      break;
+    }
+ }
   
-  moveRobot(-100);
-  delay(110);
   stopRobot();
-  
-  neck.write(DOWN);
-  while(1){
-      neckPos = analogRead(NECK_POT_PIN);
-      if(neckPos > DOWN_MAX){
-        neck.write(STOP);
-        break;
-      }
-  }
+  neckDown();
   mouth.write(OUT);
   delay(2500);
+  neckUp();
+  mouth.write(STOP);
+  fNewFuelRod=0;
+  offLED();
+ 
+  //=================== Stage 2 ======================
+  receiveRodsInf();
   
-  neck.write(UP);
+  moveRobot(-100);
+  delay(1000);
+  
+  spentRod = 5 - spentRod;
+  newRod = 5 - newRod;
+  
+  rotateLeftToLine(100, 1);
+  moveToLine(100, 5);
+
+  moveRobot(-100);
+  delay(150);
+  stopRobot();
+  
+  mouth.write(IN);
+  neck.write(DOWN);
+  neckStage = DOWN;
+  
+  endTime = millis() + 7000;
   while(1){
-      neckPos = analogRead(NECK_POT_PIN);
-      if(neckPos < UP_MAX){
+    // Read neck potentiometr
+    neckPos = analogRead(NECK_POT_PIN);
+    // Read touch
+    touch = digitalRead(6);
+    
+    if(neckStage == DOWN){
+      if(neckPos > DOWN_MAX){
         neck.write(STOP);
+      }
+      if(touch == 0){
+        mouth.write(STOP);
+        neckStage = UP;
+        neck.write(UP);
+      }
+      if(millis()>endTime){
+        //rotateRight(50);
+        //delay(50);
+        //rotateLeft(50);
+        //delay(100);
+        //rotateRight(50);
+        //delay(50);
+        
+        neckUp();
+        endTime = millis() + 7000;
+        neck.write(DOWN);
+      }
+    }else{
+      if(neckPos < UP_MAX){
         break;
       }
+    }
   }
+  fSpentFuelRod = 1;
+  onLED();
+  
+  neck.write(STOP);
+  moveRobot(-100);
+  delay(1000);
+        
+  rotateLeftToLine(100, 1);
+  moveToLine(100, spentRod);
+  rotateLeftToLine(100, 1);
+ 
+ // Move to spent rod
+  endTime = millis()+1000; 
+  while(1){
+    leftLight = analogRead(A2);
+    rightLight = analogRead(A0);
+    frontLight2 = analogRead(A10);
+    
+    followLine();
+    if(millis() > endTime){
+      if(findLine(frontLight2, 1)==1)
+        break;
+    }
+  }
+  stopRobot();
+  // Put spent rod
+  mouth.write(OUT);
+  delay(2500);
+  mouth.write(STOP);
+  fSpentFuelRod=0;
   offLED();
   
-  delay(10000);
+  // A littel bit back  
+  moveRobot(-100);
+  delay(1000);
   
+  rotateRightToLine(100, 1);
+  // Move to main line
+  moveToLine(100, 1);
+  
+  if(spentRod < newRod){  
+    rotateLeftToLine(100, 1);
+    moveToLine(100, newRod - spentRod);
+    rotateRightToLine(100, 1);
+  }else{
+    if(spentRod > newRod){ 
+      rotateRightToLine(100, 1);
+      moveToLine(100, spentRod-newRod);
+      rotateLeftToLine(100, 1);
+    }
+  }
+
+  // Move to new rod from main line
+  endTime = millis()+1000;
+  while(1){
+    leftLight = analogRead(A2);
+    rightLight = analogRead(A0);
+    frontLight2 = analogRead(A10);
+    
+    followLine();
+    if(millis()>endTime){
+      if(findLine(frontLight2, 1)==1)
+        break;
+    }
+  }
+  
+  mouth.write(IN);
+  moveRobot(5);
+  
+  while(1){
+    // Read touch
+    touch = digitalRead(6);
+    if(touch == 0){
+      mouth.write(STOP);
+      break;
+    }
+  }
+  fNewFuelRod=1;
+  onLED();
+  // Go back for a littel
+  moveRobot(-100);
+  delay(1000);
+  // rotate on 180
+  rotateRightToLine(100, 1);
+  // Go to main line
+  moveToLine(100, 1);
+  
+  rotateLeftToLine(100, 1);
+  if(newRod-1 != 0)
+    moveToLine(100, newRod-1);
+ 
+ while(1){
+    leftLight = analogRead(A2);
+    rightLight = analogRead(A0);
+    followLine();
+    if(digitalRead(31) == 0){
+      break;
+    }
+ }
+  
+  stopRobot();
+  neckDown();
+  mouth.write(OUT);
+  delay(2500);
+  neckUp();
+  mouth.write(STOP);
+  fNewFuelRod=0;
+  offLED();
+  
+  delay(15000);
+  /*
   // === Display data ===
   Serial.print(leftLight);
   Serial.print(" - ");
@@ -462,7 +717,7 @@ void loop(){
   Serial.print(rightLight);
   Serial.print(" - ");
   Serial.println(frontLight);
-  Serial.println(stage);
+  */
   
   //delay(1);
 }
