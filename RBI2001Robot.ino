@@ -1,5 +1,25 @@
 #include <BluetoothClient.h>
 #include <Servo.h>
+// =========== Mouth ===================
+#define MOUTH_MOTOR_PIN 12
+#define MOUTH_TOUCH_PIN 6
+#define IN 0
+#define OUT 180
+#define STOP 90
+Servo mouth;
+byte touch;
+
+// =========== Neck ====================
+#define NECK_MOTOR_PIN 7
+#define NECK_POT_PIN A11
+#define DOWN 150
+#define UP 0
+#define DOWN_MAX 980
+#define UP_MAX 65
+Servo neck;
+int neckPos;
+int neckStage = DOWN;
+
 //============ MAP =====================
 int stage = 100;
 int subStage = 1;
@@ -84,6 +104,13 @@ void setup(){
   
   setLeftMotor(LeftMotorSpeed);
   setRightMotor(RightMotorSpeed);
+  
+  // Mouth
+  pinMode(MOUTH_TOUCH_PIN, INPUT);
+  mouth.attach(MOUTH_MOTOR_PIN);
+  
+  // neck
+  neck.attach(NECK_MOTOR_PIN);
 }
 
 byte findLine(int sensorValue, int lineInd){
@@ -125,6 +152,11 @@ void loop(){
   centerLight = analogRead(A1);
   rightLight = analogRead(A0);
   frontLight = analogRead(A3);
+  // Read neck potentiometr
+  neckPos = analogRead(NECK_POT_PIN);
+  // Read touch
+  touch = digitalRead(6);
+  
   // Main switch
   
   switch(stage){
@@ -132,7 +164,7 @@ void loop(){
     moveRobot(100);
     delay(3000);
     rotateRight(100);
-    delay(3400);
+    delay(3600);
     stage = 101;
   break;
   case 101: //find 3th line
@@ -157,11 +189,32 @@ void loop(){
   break;
   case 105:
     followLine();
-    if(findLine(centerLight, 4)==1)
-      stage = 106;
+    if(findLine(centerLight, 3)==1){
+        moveRobot(-100);
+        delay(150);
+        stage = 106;
+        mouth.write(IN);
+        neck.write(DOWN);
+    }
   break;
   case 106:
     stopRobot();
+    if(neckStage == DOWN){
+    if(neckPos > DOWN_MAX){
+      neck.write(STOP);
+    }
+    if(touch == 0){
+      neckStage = UP;
+      neck.write(UP);
+    }
+  }else{
+    if(neckPos < UP_MAX){
+      neck.write(STOP);
+      mouth.write(OUT);
+      delay(3000);
+      mouth.write(STOP);
+    }  
+  }
   break;
   /*
   case 1:
