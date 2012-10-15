@@ -97,7 +97,7 @@ byte sentNewFuelRod(){
   return 1;
 }
 void receiveRodsInf(){
-
+  
   while(1){
     if(receiveMsg()==1){
           if(mType == 0x01){
@@ -340,7 +340,7 @@ void setup(){
   // neck
   neck.attach(NECK_MOTOR_PIN);
   
-  // Timer
+  // Bluetooth
   Serial3.begin(115200);
   Timer1.initialize(1500000);
   Timer1.attachInterrupt( timerIsr );
@@ -353,34 +353,16 @@ void setup(){
   onLED(); 
   receiveRodsInf();
   offLED();
-  //Start delay
-  //delay(10000);
   setLeftMotor(LeftMotorSpeed);
   setRightMotor(RightMotorSpeed);
 }
 
 void loop(){
-  //while(1){
-  //  Serial.println(digitalRead(31));
-  //}
-  // Read sensors
-  //leftLight = analogRead(A2);
-  //centerLight = analogRead(A1);
-  //rightLight = analogRead(A0);
-  //frontLight = analogRead(A3);
-  //frontLight2 = analogRead(A10);
-  // Read neck potentiometr
-  //neckPos = analogRead(NECK_POT_PIN);
-  // Read touch
-  //touch = digitalRead(6);
-  
-  /*
   // Intro
     moveRobot(100);
     delay(3000);
     rotateRight(100);
     delay(3500);
-   */
    
   // Stage 1
   moveRobot(100);
@@ -417,14 +399,7 @@ void loop(){
         neckStage = UP;
         neck.write(UP);
       }
-      if(millis()>endTime){
-        //rotateRight(50);
-        //delay(50);
-        //rotateLeft(50);
-        //delay(100);
-        //rotateRight(50);
-        //delay(50);
-        
+      if(millis()>endTime){      
         neckUp();
         endTime = millis() + 6000;
         neck.write(DOWN);
@@ -435,6 +410,7 @@ void loop(){
       }
     }
   }
+  
   fSpentFuelRod = 1;
   onLED();
   
@@ -443,7 +419,7 @@ void loop(){
   delay(1000);
         
   rotateLeftToLine(100, 1);
-  moveToLine(100, spentRod);
+  moveToLine(100, spentRod); //find spent rod line
   rotateRightToLine(100, 1);
  
  // Move to spent rod
@@ -514,7 +490,7 @@ void loop(){
   }
   fNewFuelRod=1;
   onLED();
-  // Go back for a littel
+  // Go back for a little
   moveRobot(-100);
   delay(1000);
   // rotate on 180
@@ -545,6 +521,9 @@ void loop(){
   offLED();
  
   //=================== Stage 2 ======================
+  Serial3.flush();
+  for(int i = 0; i < 64; i++)
+    Serial3.read();
   receiveRodsInf();
   
   moveRobot(-100);
