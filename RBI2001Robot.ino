@@ -21,7 +21,7 @@ int neckPos;
 int neckStage = DOWN;
 
 //============ MAP =====================
-int stage = 100;
+int stage = 108;
 int subStage = 1;
 int spentRod = 3;
 int newRod = 1;
@@ -48,6 +48,7 @@ int leftLight; // A2
 int centerLight; // A1
 int rightLight; // A0
 int frontLight; // A3
+int frontLight2;
 
 int isBright(int sensor_val){
   if(sensor_val<=LIGHT_MEAN)
@@ -152,6 +153,7 @@ void loop(){
   centerLight = analogRead(A1);
   rightLight = analogRead(A0);
   frontLight = analogRead(A3);
+  //frontLight2 = analogRead(A10);
   // Read neck potentiometr
   neckPos = analogRead(NECK_POT_PIN);
   // Read touch
@@ -164,7 +166,7 @@ void loop(){
     moveRobot(100);
     delay(3000);
     rotateRight(100);
-    delay(3600);
+    delay(3500);
     stage = 101;
   break;
   case 101: //find 3th line
@@ -193,28 +195,60 @@ void loop(){
         moveRobot(-100);
         delay(150);
         stage = 106;
+        stopRobot();
         mouth.write(IN);
         neck.write(DOWN);
     }
   break;
-  case 106:
-    stopRobot();
+  case 106: // Taking rod
     if(neckStage == DOWN){
-    if(neckPos > DOWN_MAX){
-      neck.write(STOP);
+       if(neckPos > DOWN_MAX){
+       neck.write(STOP);
     }
     if(touch == 0){
+      mouth.write(STOP);
       neckStage = UP;
       neck.write(UP);
     }
   }else{
     if(neckPos < UP_MAX){
       neck.write(STOP);
-      mouth.write(OUT);
-      delay(3000);
-      mouth.write(STOP);
-    }  
+      moveRobot(-100);
+      delay(250);
+      stage = 107;
+    }
   }
+  break;
+  case 107:
+    rotateLeft(100);
+    if(findLine(frontLight, 3)==1){
+      stage = 108;
+    }
+  break;
+  case 108:
+    followLine();
+    if(findLine(centerLight, 2)==1){
+      stage = 109;
+    }
+  break;
+  case 109:
+    rotateRight(100);
+    if(findLine(frontLight, 2)==1){
+      delay(100);
+      stopRobot();
+      delay(1000);
+      stage = 110;
+    }
+  break;
+  case 110:
+    followLine();/*
+    if(findLine(frontLight2, 2)==1){
+      stopRobot();
+      stage = 111;
+    }  */
+  break;
+  case 111:
+    mouth.write(OUT);
   break;
   /*
   case 1:
